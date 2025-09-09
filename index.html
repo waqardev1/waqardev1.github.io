@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Platform Starter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Global variables for Firebase access
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Import the functions you need from the Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+        
+        // Firebase initialization check
+        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+            console.error("Firebase config is missing. Please ensure it's provided.");
+        } else {
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+            
+            let userId = null;
+
+            // Authentication logic
+            async function authenticate() {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    userId = auth.currentUser.uid;
+                    document.getElementById('userIdDisplay').innerText = `User ID: ${userId}`;
+                    console.log("User authenticated with UID:", userId);
+                    setupRealtimeListener(userId);
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                }
+            }
+
+            // Realtime listener for courses
+            function setupRealtimeListener(uid) {
+                const coursesCollectionRef = collection(db, `artifacts/${appId}/users/${uid}/courses`);
+                onSnapshot(coursesCollectionRef, (snapshot) => {
+                    const coursesList = document.getElementById('coursesList');
+                    coursesList.innerHTML = '';
+                    snapshot.forEach((doc) => {
+                        const courseData = doc.data();
+                        const courseItem = document.createElement('li');
+                        courseItem.className = 'p-3 my-2 bg-white rounded-lg shadow-sm';
+                        courseItem.innerHTML = `<h3 class="font-semibold text-lg">${courseData.title}</h3>`;
+                        coursesList.appendChild(courseItem);
+                    });
+                }, (error) => {
+                    console.error("Error listening to courses:", error);
+                });
+            }
+
+            // Event listener for adding a new course
+            document.getElementById('addCourseForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const courseTitleInput = document.getElementById('courseTitle');
+                const courseTitle = courseTitleInput.value.trim();
+                
+                if (courseTitle && userId) {
+                    try {
+                        const coursesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/courses`);
+                        await addDoc(coursesCollectionRef, {
+                            title: courseTitle,
+                            createdAt: serverTimestamp(),
+                        });
+                        courseTitleInput.value = '';
+                    } catch (error) {
+                        console.error("Error adding course:", error);
+                    }
+                } else if (!userId) {
+                    console.error("User not authenticated.");
+                }
+            });
+
+            // Start authentication
+            authenticate();
+        }
+    </script>
+</head>
+<body class="bg-gray-100 font-sans antialiased text-gray-800 p-8">
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-blue-700">My Free LMS</h1>
+            <p class="mt-2 text-lg text-gray-500">A zero-cost online course platform.</p>
+        </header>
+
+        <!-- User ID Display -->
+        <div class="mb-6 text-sm text-gray-600">
+            <p id="userIdDisplay">Authenticating...</p>
+        </div>
+
+        <main class="grid md:grid-cols-2 gap-8">
+            <!-- Add New Course Form -->
+            <div class="bg-gray-50 p-6 rounded-lg shadow-inner">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4">Add a New Course</h2>
+                <form id="addCourseForm">
+                    <label for="courseTitle" class="block text-sm font-medium text-gray-700 mb-2">Course Title</label>
+                    <input type="text" id="courseTitle" name="courseTitle" required class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <button type="submit" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                        Add Course
+                    </button>
+                </form>
+            </div>
+
+            <!-- Course List -->
+            <div class="bg-gray-50 p-6 rounded-lg shadow-inner">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4">Your Courses</h2>
+                <ul id="coursesList" class="space-y-4">
+                    <!-- Course items will be added here dynamically -->
+                    <li class="text-center text-gray-400 py-4">No courses added yet.</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
